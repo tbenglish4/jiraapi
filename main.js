@@ -17,7 +17,7 @@ function getJIRAFeed(callback, errorCallback){
 async function getQueryResults(s, callback, errorCallback) {                                                 
     try {
       var response = await make_request(s, "json");
-      callback(createHTMLElementResult(response));
+      callback(response, s);
     } catch (error) {
       errorCallback(error);
     }
@@ -73,17 +73,6 @@ function buildJQL(callback) {
   fullCallbackUrl += `project=${project}+and+status=${status}+and+status+changed+to+${status}+before+-${inStatusFor}d&fields=id,status,key,assignee,summary&maxresults=100`;
   callback(fullCallbackUrl);
 }
-function createHTMLElementResult(response){
-
-// 
-// Create HTML output to display the search results.
-// results.json in the "json_results" folder contains a sample of the API response
-// hint: you may run the application as well if you fix the bug. 
-// 
-
-  return '<p>There may be results, but you must read the response and display them.</p>';
-  
-}
 
 // utility 
 function domify(str){
@@ -91,22 +80,72 @@ function domify(str){
   return dom.body.textContent;
 }
 
-function checkProjectExists(){
+async function checkProjectExists(){
     try {
-      return await make_request("https://jira.secondlife.com/rest/api/2/project/SUN", "json");
+		var project = document.getElementById("project").value;
+      return await make_request(`https://jira.secondlife.com/rest/api/2/project/${project}`, "json");
     } catch (errorMessage) {
       document.getElementById('status').innerHTML = 'ERROR. ' + errorMessage;
       document.getElementById('status').hidden = false;
     }
 }
 
+function renderQueryResults(return_val, url) {
+	// render the results
+	document.getElementById('status').innerHTML = 'Query term: ' + url + '\n';
+	document.getElementById('status').hidden = false;
+	
+	var jsonResultDiv = document.getElementById('query-result');
+	if (return_val.total && return_val.total > 0) {
+		if (return_val.total == return_val.issues.length) {
+			var queryItemList = document.createElement('ul');
+			for (var index = 0; index < return_val.issues.length; index++) {
+				var issue = return_val.issues[index];
+				var issueLink = buildLinkHTML(issue["self"], issue.key); 
+				var issueHTMLItem = addListItemToList(queryItemList, `${issueLink.outerHTML}: ${issue.fields.summary}`);
+				var issueInnerList = document.createElement('ul');
+				addListItemToList(issueInnerList, `Status: ${issue.fields.status.name}. ${issue.fields.status.description}`);
+				if (issue.fields.assignee) {
+					var assigneeLink = buildLinkHTML(issue.fields.assignee["self"], issue.fields.assignee.displayName);
+					addListItemToList(issueInnerList, `Assigned To: ${assigneeLink.outerHTML} (${issue.fields.assignee.emailAddress})`);
+				} else {
+					addListItemToList(issueInnerList, `Assigned To: nobody`);
+				}
+				issueHTMLItem.appendChild(issueInnerList);
+			}
+			jsonResultDiv.innerHTML = queryItemList.outerHTML;
+			jsonResultDiv.hidden = false;
+		} else {
+			document.getElementById('status').innerHTML = 'Could not display activity results.';
+			jsonResultDiv.hidden = true;
+		}
+	} else {
+		document.getElementById('status').innerHTML = 'There are no activity results.';
+		jsonResultDiv.hidden = true;
+	}
+}
+
+function addListItemToList(list, itemInnerHTML) {
+	var issueInnerListKeyItem = document.createElement('li');
+	issueInnerListKeyItem.innerHTML = itemInnerHTML;
+	list.appendChild(issueInnerListKeyItem);
+	return issueInnerListKeyItem;
+}
+
+function buildLinkHTML(linkUrl, linkText) {
+	var linkItem = document.createElement('a');
+	linkItem.href = linkUrl;
+	linkItem.innerHTML = linkText;
+	return linkItem;
+}
+	
+
 // Setup
 document.addEventListener('DOMContentLoaded', function() {
+  //load saved options
+      loadOptions();
   // if logged in, setup listeners
     checkProjectExists().then(function() {
-      //load saved options
-      loadOptions();
-
       // query click handler
       document.getElementById("query").onclick = function(){
         // build query
@@ -114,16 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
           document.getElementById('status').innerHTML = 'Performing JIRA search for ' + url;
           document.getElementById('status').hidden = false;  
           // perform the search
-          getQueryResults(url, function(return_val) {
-            // render the results
-            document.getElementById('status').innerHTML = 'Query term: ' + url + '\n';
-            document.getElementById('status').hidden = false;
-            
-            var jsonResultDiv = document.getElementById('query-result');
-            jsonResultDiv.innerHTML = return_val;
-            jsonResultDiv.hidden = false;
-
-          }, function(errorMessage) {
+          getQueryResults(url, renderQueryResults, function(errorMessage) {
               document.getElementById('status').innerHTML = 'ERROR. ' + errorMessage;
               document.getElementById('status').hidden = false;
           });
