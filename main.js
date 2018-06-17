@@ -1,49 +1,77 @@
+const JIRA_SECONDLIFE_URL = "https://jira.secondlife.com";
+const ELEMENT_PROJECT_ID = "project";
+const ELEMENT_USER_ID = "user";
+const ELEMENT_MAXIMUMRESULTS_ID = "maximumresults";
+const ELEMENT_STATUSSELECT_ID = "statusSelect";
+const ELEMENT_DAYSPAST_ID = "daysPast";
+const ELEMENT_STATUS_ID = "status";
+const ELEMENT_FEED_ID = "feed";
+const XMLRESPONSE_FEED_TAG = "feed";
+const XMLRESPONSE_ENTRY_TAG = "entry";
+const XMLRESPONSE_TITLE_TAG = "title";
+const XMLRESPONSE_UPDATED_TAG = "updated";
+const ELEMENT_QUERY_ID = "query";
+const ELEMENT_QUERYRESULT_ID = "query-result";
+const RESPONSE_TYPE_XML = "xml";
+const RESPONSE_TYPE_JSON = "json";
+
 /**
  * Request and download the JIRA feed for a particular user
+ * @param {async function(string, string)} makeRequestDelegate - The makeRequest function or a function with similar behavior
  * @param {function(xmlDocument, string)} callback - Called to process and render the results of the XMLDocument returned
- * @param {function(string)} errorCallback - Called when the query or call fails.
  */
-function getJIRAFeed(callback, errorCallback){
-    var user = document.getElementById("user").value;
+function getJIRAFeed(makeRequestDelegate, callback){
+    var user = document.getElementById(ELEMENT_USER_ID).value;
+	var maximumresults = document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value;
     if(!user) {
 		displayErrorStatus("Please enter a user name to view feed activity");
+	} else if (!maximumresults) {
+		displayErrorStatus("Please specify a valid maximum number of items to return in your chrome options for this extension");
 	} else {
-		var url = "https://jira.secondlife.com/activity?maxResults=50&streams=user+IS+"+encodeURIComponent(user)+"&providers=issues";
-		makeAndProcessRequest(url, callback, errorCallback, "xml");
+		var url = JIRA_SECONDLIFE_URL+"/activity?maxResults="+encodeURIComponent(maximumresults)+"&streams=user+IS+"+encodeURIComponent(user)+"&providers=issues";
+		makeAndProcessRequest(url, makeRequestDelegate, callback, displayErrorStatus, RESPONSE_TYPE_XML).then(function()  { return; });
 	}
 }
 
 /**
  * Request and download results for a query on JIRA issues
+ * @param {async function(string, string)} makeRequestDelegate - The makeRequest function or a function with similar behavior
  * @param {function(string)} callback - Called when the query results have been  
  *   formatted for rendering.
  */
-function getJIRAQueryResult(callback) {
-  var callbackBase = "https://jira.secondlife.com/rest/api/2/search?jql=";
-  var project = document.getElementById("project").value;
-  var status = document.getElementById("statusSelect").value;
-  var inStatusFor = document.getElementById("daysPast").value
+function getJIRAQueryResult(makeRequestDelegate, callback) {
+  var callbackBase = JIRA_SECONDLIFE_URL+"/rest/api/2/search?jql=";
+  var project = document.getElementById(ELEMENT_PROJECT_ID).value;
+  var status = document.getElementById(ELEMENT_STATUSSELECT_ID).value;
+  var inStatusFor = document.getElementById(ELEMENT_DAYSPAST_ID).value;
+  var maximumresults = document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value;
   if (!project) {
 	  displayErrorStatus("You must enter a project name to query for");
   } else if (!inStatusFor) {
 	  displayErrorStatus("You must choose a for longer than value in your query");
+  } else if (!maximumresults) {
+		displayErrorStatus("Please specify a valid maximum number of items to return in your chrome options for this extension");
   } else {
 	var fullCallbackUrl = callbackBase;
-	fullCallbackUrl += `project=${encodeURIComponent(project)}+and+status=${encodeURIComponent(status)}+and+status+changed+to+${encodeURIComponent(status)}+before+-${encodeURIComponent(inStatusFor)}d&fields=id,status,key,assignee,summary&maxresults=100`;
-	callback(fullCallbackUrl);
+	fullCallbackUrl += `project=${encodeURIComponent(project)}+and+status=${encodeURIComponent(status)}+and+status+changed+to+${encodeURIComponent(status)}+before+-${encodeURIComponent(inStatusFor)}d&fields=id,status,key,assignee,summary&maxresults=${encodeURIComponent(maximumresults)}`;
+	document.getElementById(ELEMENT_STATUS_ID).innerHTML = 'Making request...';
+    document.getElementById(ELEMENT_STATUS_ID).hidden = false;  
+	makeAndProcessRequest(fullCallbackUrl, makeRequestDelegate, callback, displayErrorStatus, RESPONSE_TYPE_JSON).then(function()  { return; });
   }
 }
 
 /**
  * Make and process an HTTP GET request that returns a JSON response
  * @param {string} url
+ * @param {async function(string, string)} makeRequestDelegate - The makeRequest function or a function with similar behavior
  * @param {function(responseObject, string)} callback - Called when the query results have been  
  *   formatted for rendering.
  * @param {function(string)} errorCallback - Called when the query or call fails.
+ * @param {string} responseFormat - string that specifies what the format of the response should be, e.g. json
  */
-async function makeAndProcessRequest(url, callback, errorCallback, responseFormat) {                                                 
+async function makeAndProcessRequest(url, makeRequestDelegate, callback, errorCallback, responseFormat) {                                                 
     try {
-      var response = await make_request(url, responseFormat);
+      var response = await makeRequestDelegate(url, responseFormat);
       callback(response, url);
     } catch (error) {
       errorCallback(error);
@@ -53,22 +81,22 @@ async function makeAndProcessRequest(url, callback, errorCallback, responseForma
 /**
  * Make an HTTP Get request
  * @param {string} url - The url to make the request to
- * @param {string} responseType - string that specifies what the format of the response should be, e.g. json
+ * @param {string} responseFormat - string that specifies what the format of the response should be, e.g. json
  * Returns a promise you can await on, containing a result or rejection error
  */
-function make_request(url, responseType) {
+function makeRequest(url, responseFormat) {
   return new Promise(function(resolve, reject) {
     var req = new XMLHttpRequest();
     req.open('GET', url);
-	if (responseType == "xml") {
+	if (responseFormat == RESPONSE_TYPE_XML) {
 		req.responseType = "";
 	} else {
-		req.responseType = responseType;
+		req.responseType = responseFormat;
 	}
 
     req.onload = function() {
 	  var response = null;
-	  if (responseType == "xml") {
+	  if (responseFormat == RESPONSE_TYPE_XML) {
 		  response = req.responseXML;
 	  } else {
 		  response = req.response;
@@ -99,14 +127,20 @@ function make_request(url, responseType) {
 function loadOptions(){
   chrome.storage.sync.get({
     project: 'Sunshine',
-    user: 'nyx.linden'
+    user: 'nyx.linden',
+	maximumresults: 50
   }, function(items) {
-    document.getElementById('project').value = items.project;
-    document.getElementById('user').value = items.user;
+    document.getElementById(ELEMENT_PROJECT_ID).value = items.project;
+    document.getElementById(ELEMENT_USER_ID).value = items.user;
+	document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value = items.maximumresults;
   });
 }
 
-// utility 
+/**
+ * Get the text content for an arbitrary string that can contain HTML
+ * @param {string} str - the input to Domify
+ * Returns the text content of str
+ */
 function domify(str){
   var dom = (new DOMParser()).parseFromString('<!doctype html><body>' + str,'text/html');
   return dom.body.textContent;
@@ -115,8 +149,8 @@ function domify(str){
 // Returns a promise that contains a response from the project-specific url, which can be used to check whether the project exists
 async function checkProjectExists(){
     try {
-		var project = document.getElementById("project").value;
-      return await make_request(`https://jira.secondlife.com/rest/api/2/project/${encodeURIComponent(project)}`, "json");
+		var project = document.getElementById(ELEMENT_PROJECT_ID).value;
+      return await makeRequest(`https://jira.secondlife.com/rest/api/2/project/${encodeURIComponent(project)}`, RESPONSE_TYPE_JSON);
     } catch (errorMessage) {
       displayErrorStatus(errorMessage);
     }
@@ -128,23 +162,21 @@ async function checkProjectExists(){
  * @param {string} url - The url of the request that return_val came from
  */
 function renderQueryResults(return_val, url) {
-	// render the results
-	document.getElementById('status').innerHTML = 'Query term: ' + url + '\n';
-	document.getElementById('status').hidden = false;
+	document.getElementById(ELEMENT_STATUS_ID).hidden = true;
 	
-	var jsonResultDiv = document.getElementById('query-result');
+	var jsonResultDiv = document.getElementById(ELEMENT_QUERYRESULT_ID);
 	if (return_val.total && return_val.total > 0) {
 		if (return_val.total == return_val.issues.length) {
 			var queryItemList = document.createElement('ul');
 			for (var index = 0; index < return_val.issues.length; index++) {
 				var issue = return_val.issues[index];
-				var issueLink = buildLinkHTML(issue["self"], issue.key); 
-				var issueHTMLItem = addListItemToList(queryItemList, `${issueLink.outerHTML}: ${issue.fields.summary}`);
+				var issueLink = buildLinkHTML(domify(issue["self"]), domify(issue.key)); 
+				var issueHTMLItem = addListItemToList(queryItemList, `${issueLink.outerHTML}: ${domify(issue.fields.summary)}`);
 				var issueInnerList = document.createElement('ul');
-				addListItemToList(issueInnerList, `Status: ${issue.fields.status.name}. ${issue.fields.status.description}`);
+				addListItemToList(issueInnerList, `Status: ${domify(issue.fields.status.name)}. ${domify(issue.fields.status.description)}`);
 				if (issue.fields.assignee) {
-					var assigneeLink = buildLinkHTML(issue.fields.assignee["self"], issue.fields.assignee.displayName);
-					addListItemToList(issueInnerList, `Assigned To: ${assigneeLink.outerHTML} (${issue.fields.assignee.emailAddress})`);
+					var assigneeLink = buildLinkHTML(domify(issue.fields.assignee["self"]), domify(issue.fields.assignee.displayName));
+					addListItemToList(issueInnerList, `Assigned To: ${assigneeLink.outerHTML} (${domify(issue.fields.assignee.emailAddress)})`);
 				} else {
 					addListItemToList(issueInnerList, `Assigned To: nobody`);
 				}
@@ -153,50 +185,67 @@ function renderQueryResults(return_val, url) {
 			jsonResultDiv.innerHTML = queryItemList.outerHTML;
 			jsonResultDiv.hidden = false;
 		} else {
-			document.getElementById('status').innerHTML = 'Could not display activity results.';
+			document.getElementById(ELEMENT_STATUS_ID).innerHTML = 'Could not display activity results.';
+			document.getElementById(ELEMENT_STATUS_ID).hidden = false;
 			jsonResultDiv.hidden = true;
 		}
 	} else {
-		document.getElementById('status').innerHTML = 'There are no activity results.';
+		document.getElementById(ELEMENT_STATUS_ID).innerHTML = 'There are no activity results.';
+		document.getElementById(ELEMENT_STATUS_ID).hidden = false;
 		jsonResultDiv.hidden = true;
 	}
 }
 
 /**
- * Render a JIRA feed
+ * Render a JIRA feed result
  * @param {xmlDocument} xmlDoc - An xml document that contains the results of the request
  * @param {string} url - The url of the request that xmlDoc came from
  */
 function renderFeedResults(xmlDoc, url) {
-	document.getElementById('status').innerHTML = 'Activity query: ' + url + '\n';
-	document.getElementById('status').hidden = false;
-
-	// render result
-	var feed = xmlDoc.getElementsByTagName('feed');
-	var entries = feed[0].getElementsByTagName("entry");
+	document.getElementById(ELEMENT_STATUS_ID).hidden = true;
+	var feedResultDiv = document.getElementById(ELEMENT_QUERYRESULT_ID);
+	
+	var feed = xmlDoc.getElementsByTagName(XMLRESPONSE_FEED_TAG);
+	if (!feed || feed.length == 0) {
+		document.getElementById(ELEMENT_STATUS_ID).innerHTML = 'There are no feed results.';
+		document.getElementById(ELEMENT_STATUS_ID).hidden = false;
+		feedResultDiv.hidden = true;
+		return;
+	}
+	var entries = feed[0].getElementsByTagName(XMLRESPONSE_ENTRY_TAG);
+	if (!entries || entries.length == 0) {
+		document.getElementById(ELEMENT_STATUS_ID).innerHTML = 'There are no feed results.';
+		document.getElementById(ELEMENT_STATUS_ID).hidden = false;
+		feedResultDiv.hidden = true;
+		return;
+	}
 	var list = document.createElement('ul');
 
 	for (var index = 0; index < entries.length; index++) {
-		var html = entries[index].getElementsByTagName("title")[0].innerHTML;
-		var updated = entries[index].getElementsByTagName("updated")[0].innerHTML;
-		var item = document.createElement('li');
-		item.innerHTML = new Date(updated).toLocaleString() + " - " + domify(html);
-		list.appendChild(item);
+		var htmlInfo = entries[index].getElementsByTagName(XMLRESPONSE_TITLE_TAG);
+		var updatedInfo = entries[index].getElementsByTagName(XMLRESPONSE_UPDATED_TAG);
+		if (htmlInfo && updatedInfo && htmlInfo.length > 0 && updatedInfo.length > 0) {
+			var html = htmlInfo[0].innerHTML;
+			var updated = updatedInfo[0].innerHTML;
+			var item = document.createElement('li');
+			item.innerHTML = new Date(updated).toLocaleString() + " - " + domify(html);
+			list.appendChild(item);
+		}
 	}
 
-	var feedResultDiv = document.getElementById('query-result');
+	
 	if(list.childNodes.length > 0){
 		feedResultDiv.innerHTML = list.outerHTML;
 		feedResultDiv.hidden = false;
 	} else {
-		document.getElementById('status').innerHTML = 'There are no activity results.';
-		document.getElementById('status').hidden = false;
+		document.getElementById(ELEMENT_STATUS_ID).innerHTML = 'There are no feed results.';
+		document.getElementById(ELEMENT_STATUS_ID).hidden = false;
 		feedResultDiv.hidden = true;
 	}
 }
 
 /**
- * Add a li element to the provided list, with a specific innerHTML
+ * Helper method to add a li element to the provided list, with a specific innerHTML
  * @param {ul DOM element} list - The unordered list that will be added to
  * @param {string} itemInnerHTML - the Inner HTML to set in the new list item
  */
@@ -208,7 +257,7 @@ function addListItemToList(list, itemInnerHTML) {
 }
 
 /**
- * Build an <a> link element
+ * Helper method to build an <a> link element
  * @param {ul DOM element} list - The unordered list that will be added to
  * @param {string} itemInnerHTML - the Inner HTML to set in the new list item
  */
@@ -221,9 +270,9 @@ function buildLinkHTML(linkUrl, linkText) {
 	
 // Display an error status
 function displayErrorStatus(errorText) {
-	document.getElementById('status').innerHTML = `ERROR. ${errorText}`;
-    document.getElementById('status').hidden = false;
-	document.getElementById('query-result').hidden = true;
+	document.getElementById(ELEMENT_STATUS_ID).innerHTML = `ERROR. ${errorText}`;
+    document.getElementById(ELEMENT_STATUS_ID).hidden = false;
+	document.getElementById(ELEMENT_QUERYRESULT_ID).hidden = true;
 }
 
 // Setup
@@ -234,24 +283,15 @@ document.addEventListener('DOMContentLoaded', function() {
     checkProjectExists().then(function() {
 		
       // query click handler
-      document.getElementById("query").onclick = function(){
+      document.getElementById(ELEMENT_QUERY_ID).onclick = function(){
         // build query
-        getJIRAQueryResult(function(url) {
-          document.getElementById('status').innerHTML = 'Performing JIRA search for ' + url;
-          document.getElementById('status').hidden = false;  
-          // perform the search
-          makeAndProcessRequest(url, renderQueryResults, function(errorMessage) {
-              displayErrorStatus(errorMessage);
-          }, "json");
-        });
+        getJIRAQueryResult(makeRequest, renderQueryResults);
       }
 
       // activity feed click handler
-      document.getElementById("feed").onclick = function(){   
+      document.getElementById(ELEMENT_FEED_ID).onclick = function(){   
         // get the xml feed
-        getJIRAFeed(renderFeedResults, function(errorMessage) {
-          displayErrorStatus(errorMessage);
-        });    
+        getJIRAFeed(makeRequest, renderFeedResults);    
       };        
 
     }).catch(function(errorMessage) {

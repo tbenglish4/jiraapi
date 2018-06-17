@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <title>Tests</title>
+
+    <link rel="stylesheet" href="css/qunit.css" />
+    <script src="qunit.js"></script>
+    <script src="main.js"></script>
+
+    <script>
+    QUnit.test("sample getJIRAFeed test", function(assert) {
+		document.getElementById(ELEMENT_PROJECT_ID).value = 'someproject';
+		document.getElementById(ELEMENT_USER_ID).value = 'someuser';
+		document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value = 50;
+		getJIRAFeed(function(url, responseFormat) {
+			return new Promise(function(resolve, reject) {
+				var xmlDoc = document.implementation.createHTMLDocument('');
+				xmlDoc.open();
+				xmlDoc.write("<feed><entry><title>TITLE!</title><updated>1/2/2010, 12:00:00 PM</updated></entry></feed>");
+				xmlDoc.close();
+				resolve(xmlDoc);
+			});
+		}, renderFeedResults);
+		var statusElement = document.getElementById(ELEMENT_STATUS_ID);
+		var queryResult = document.getElementById(ELEMENT_QUERYRESULT_ID);
+        assert.equal(statusElement.hidden, true);
+		assert.equal(queryResult.hidden, false);
+		assert.equal(queryResult.innerHTML, "<ul><li>1/2/2010, 12:00:00 PM - TITLE!</li></ul>");
+    });
+    </script>
+</head>
+<body>
+    <div id="qunit"></div>
+	<div id="qunit-fixture">
+		<div class="container">
+			<div class="row">
+			  <div class="twelve columns" style="margin-top: 20%">
+				<h4>Search JIRA</h4>
+				<h5>Ticket Status Query</h5>
+				  <p>
+					<input type="search" placeholder="enter a project" id="project" />
+					<select id="statusSelect">
+					  <option value="1">Open</option>
+					  <option value="3">In Progress</option>
+					</select>
+					<label> for longer than <input type="number" id="daysPast" min="0" max="20" /> days</label>
+					<input type="submit" value="query" id="query" />
+					</p><hr /><p>
+					<h5>JIRA Activity Query</h5>
+					<input type="search" placeholder="enter a user" id="user" />
+					<input type="submit" value="get JIRA Activity" id="feed" />
+				  </p>
+			  </div>
+			</div>
+			<input type="number" id="maximumresults" hidden="true" />
+			<div class="row">
+			  <div class="twelve columns">
+				<p><span id="status" hidden /></p>
+				<div id="query-result" hidden></div>
+			  </div>
+			</div>
+		  </div>
+	</div>
+</body>
+</html>
