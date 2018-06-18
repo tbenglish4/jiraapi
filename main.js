@@ -20,7 +20,7 @@ const RESPONSE_TYPE_JSON = "json";
  * @param {async function(string, string)} makeRequestDelegate - The makeRequest function or a function with similar behavior
  * @param {function(xmlDocument, string)} callback - Called to process and render the results of the XMLDocument returned
  */
-function getJIRAFeed(makeRequestDelegate, callback){
+async function getJIRAFeed(makeRequestDelegate, callback){
     var user = document.getElementById(ELEMENT_USER_ID).value;
 	var maximumresults = document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value;
     if(!user) {
@@ -29,7 +29,7 @@ function getJIRAFeed(makeRequestDelegate, callback){
 		displayErrorStatus("Please specify a valid maximum number of items to return in your chrome options for this extension");
 	} else {
 		var url = JIRA_SECONDLIFE_URL+"/activity?maxResults="+encodeURIComponent(maximumresults)+"&streams=user+IS+"+encodeURIComponent(user)+"&providers=issues";
-		makeAndProcessRequest(url, makeRequestDelegate, callback, displayErrorStatus, RESPONSE_TYPE_XML).then(function()  { return; });
+		await makeAndProcessRequest(url, makeRequestDelegate, callback, displayErrorStatus, RESPONSE_TYPE_XML);
 	}
 }
 
@@ -39,8 +39,8 @@ function getJIRAFeed(makeRequestDelegate, callback){
  * @param {function(string)} callback - Called when the query results have been  
  *   formatted for rendering.
  */
-function getJIRAQueryResult(makeRequestDelegate, callback) {
-  var callbackBase = JIRA_SECONDLIFE_URL+"/rest/api/2/search?jql=";
+async function getJIRAQueryResult(makeRequestDelegate, callback) {
+  var urlBase = JIRA_SECONDLIFE_URL+"/rest/api/2/search?jql=";
   var project = document.getElementById(ELEMENT_PROJECT_ID).value;
   var status = document.getElementById(ELEMENT_STATUSSELECT_ID).value;
   var inStatusFor = document.getElementById(ELEMENT_DAYSPAST_ID).value;
@@ -52,16 +52,16 @@ function getJIRAQueryResult(makeRequestDelegate, callback) {
   } else if (!maximumresults) {
 		displayErrorStatus("Please specify a valid maximum number of items to return in your chrome options for this extension");
   } else {
-	var fullCallbackUrl = callbackBase;
-	fullCallbackUrl += `project=${encodeURIComponent(project)}+and+status=${encodeURIComponent(status)}+and+status+changed+to+${encodeURIComponent(status)}+before+-${encodeURIComponent(inStatusFor)}d&fields=id,status,key,assignee,summary&maxresults=${encodeURIComponent(maximumresults)}`;
+	var url = urlBase;
+	url += `project=${encodeURIComponent(project)}+and+status=${encodeURIComponent(status)}+and+status+changed+to+${encodeURIComponent(status)}+before+-${encodeURIComponent(inStatusFor)}d&fields=id,status,key,assignee,summary&maxresults=${encodeURIComponent(maximumresults)}`;
 	document.getElementById(ELEMENT_STATUS_ID).innerHTML = 'Making request...';
     document.getElementById(ELEMENT_STATUS_ID).hidden = false;  
-	makeAndProcessRequest(fullCallbackUrl, makeRequestDelegate, callback, displayErrorStatus, RESPONSE_TYPE_JSON).then(function()  { return; });
+	await makeAndProcessRequest(url, makeRequestDelegate, callback, displayErrorStatus, RESPONSE_TYPE_JSON);
   }
 }
 
 /**
- * Make and process an HTTP GET request that returns a JSON response
+ * Make and process an HTTP GET request
  * @param {string} url
  * @param {async function(string, string)} makeRequestDelegate - The makeRequest function or a function with similar behavior
  * @param {function(responseObject, string)} callback - Called when the query results have been  
@@ -69,13 +69,13 @@ function getJIRAQueryResult(makeRequestDelegate, callback) {
  * @param {function(string)} errorCallback - Called when the query or call fails.
  * @param {string} responseFormat - string that specifies what the format of the response should be, e.g. json
  */
-async function makeAndProcessRequest(url, makeRequestDelegate, callback, errorCallback, responseFormat) {                                                 
+async function makeAndProcessRequest(url, makeRequestDelegate, callback, errorCallback, responseFormat) { 
     try {
-      var response = await makeRequestDelegate(url, responseFormat);
-      callback(response, url);
-    } catch (error) {
-      errorCallback(error);
-    }
+		let response = await makeRequestDelegate(url, responseFormat);
+		return callback(response);
+	} catch (error) {
+		return errorCallback(error);
+	}
 }
 
 /**
@@ -159,9 +159,8 @@ async function checkProjectExists(){
 /**
  * Render the results from a JIRA Issues query
  * @param {jsonObject} return_val - A json object returned with query results, see results.json for an example
- * @param {string} url - The url of the request that return_val came from
  */
-function renderQueryResults(return_val, url) {
+function renderQueryResults(return_val) {
 	document.getElementById(ELEMENT_STATUS_ID).hidden = true;
 	
 	var jsonResultDiv = document.getElementById(ELEMENT_QUERYRESULT_ID);
@@ -199,9 +198,8 @@ function renderQueryResults(return_val, url) {
 /**
  * Render a JIRA feed result
  * @param {xmlDocument} xmlDoc - An xml document that contains the results of the request
- * @param {string} url - The url of the request that xmlDoc came from
  */
-function renderFeedResults(xmlDoc, url) {
+function renderFeedResults(xmlDoc) {
 	document.getElementById(ELEMENT_STATUS_ID).hidden = true;
 	var feedResultDiv = document.getElementById(ELEMENT_QUERYRESULT_ID);
 	
@@ -268,7 +266,10 @@ function buildLinkHTML(linkUrl, linkText) {
 	return linkItem;
 }
 	
-// Display an error status
+/**
+ * Display an error status
+ * @param {string} errorText - The error message to display
+ */
 function displayErrorStatus(errorText) {
 	document.getElementById(ELEMENT_STATUS_ID).innerHTML = `ERROR. ${errorText}`;
     document.getElementById(ELEMENT_STATUS_ID).hidden = false;
@@ -286,12 +287,14 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById(ELEMENT_QUERY_ID).onclick = function(){
         // build query
         getJIRAQueryResult(makeRequest, renderQueryResults);
+		//Note: the above method returns a promise, so add any following code in a .then() after it
       }
 
       // activity feed click handler
       document.getElementById(ELEMENT_FEED_ID).onclick = function(){   
         // get the xml feed
-        getJIRAFeed(makeRequest, renderFeedResults);    
+        getJIRAFeed(makeRequest, renderFeedResults);
+		//Note: the above method returns a promise, so add any following code in a .then() after it		
       };        
 
     }).catch(function(errorMessage) {

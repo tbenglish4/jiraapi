@@ -9,11 +9,12 @@
     <script src="main.js"></script>
 
     <script>
-    QUnit.test("sample getJIRAFeed test", function(assert) {
+    QUnit.test("nominal getJIRAFeed test", function(assert) {
+		var done = assert.async();
 		document.getElementById(ELEMENT_PROJECT_ID).value = 'someproject';
 		document.getElementById(ELEMENT_USER_ID).value = 'someuser';
 		document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value = 50;
-		getJIRAFeed(function(url, responseFormat) {
+		getJIRAFeed(async function(url, responseFormat) {
 			return new Promise(function(resolve, reject) {
 				var xmlDoc = document.implementation.createHTMLDocument('');
 				xmlDoc.open();
@@ -21,12 +22,301 @@
 				xmlDoc.close();
 				resolve(xmlDoc);
 			});
-		}, renderFeedResults);
-		var statusElement = document.getElementById(ELEMENT_STATUS_ID);
-		var queryResult = document.getElementById(ELEMENT_QUERYRESULT_ID);
-        assert.equal(statusElement.hidden, true);
-		assert.equal(queryResult.hidden, false);
-		assert.equal(queryResult.innerHTML, "<ul><li>1/2/2010, 12:00:00 PM - TITLE!</li></ul>");
+		}, renderFeedResults).then(function () {
+			var statusElement = document.getElementById(ELEMENT_STATUS_ID);
+			var queryResult = document.getElementById(ELEMENT_QUERYRESULT_ID);
+			assert.equal(statusElement.hidden, true);
+			assert.equal(queryResult.hidden, false);
+			assert.equal(queryResult.innerHTML, "<ul><li>1/2/2010, 12:00:00 PM - TITLE!</li></ul>");
+			done();
+		});
+    });
+	QUnit.test("missing user getJIRAFeed test", function(assert) {
+		var done = assert.async();
+		document.getElementById(ELEMENT_PROJECT_ID).value = 'someproject';
+		document.getElementById(ELEMENT_USER_ID).value = '';
+		document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value = 50;
+		getJIRAFeed(async function(url, responseFormat) {
+			return new Promise(function(resolve, reject) {
+				var xmlDoc = document.implementation.createHTMLDocument('');
+				xmlDoc.open();
+				xmlDoc.write("<feed><entry><title>TITLE!</title><updated>1/2/2010, 12:00:00 PM</updated></entry></feed>");
+				xmlDoc.close();
+				resolve(xmlDoc);
+			});
+		}, renderFeedResults).then(function () {
+			var statusElement = document.getElementById(ELEMENT_STATUS_ID);
+			var queryResult = document.getElementById(ELEMENT_QUERYRESULT_ID);
+			assert.equal(statusElement.hidden, false);
+			assert.equal(queryResult.hidden, true);
+			assert.equal(statusElement.innerHTML, "ERROR. Please enter a user name to view feed activity");
+			done();
+		});
+    });
+	QUnit.test("missing maxresults getJIRAFeed test", function(assert) {
+		var done = assert.async();
+		document.getElementById(ELEMENT_PROJECT_ID).value = 'someproject';
+		document.getElementById(ELEMENT_USER_ID).value = 'someuser';
+		document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value = '';
+		getJIRAFeed(async function(url, responseFormat) {
+			return new Promise(function(resolve, reject) {
+				var xmlDoc = document.implementation.createHTMLDocument('');
+				xmlDoc.open();
+				xmlDoc.write("<feed><entry><title>TITLE!</title><updated>1/2/2010, 12:00:00 PM</updated></entry></feed>");
+				xmlDoc.close();
+				resolve(xmlDoc);
+			});
+		}, renderFeedResults).then(function () {
+			var statusElement = document.getElementById(ELEMENT_STATUS_ID);
+			var queryResult = document.getElementById(ELEMENT_QUERYRESULT_ID);
+			assert.equal(statusElement.hidden, false);
+			assert.equal(queryResult.hidden, true);
+			assert.equal(statusElement.innerHTML, "ERROR. Please specify a valid maximum number of items to return in your chrome options for this extension");
+			done();
+		});
+    });
+	QUnit.test("network call error getJIRAFeed test", function(assert) {
+		var done = assert.async();
+		document.getElementById(ELEMENT_PROJECT_ID).value = 'someproject';
+		document.getElementById(ELEMENT_USER_ID).value = 'someuser';
+		document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value = 50;
+		getJIRAFeed(async function(url, responseFormat) {
+			return new Promise(function(resolve, reject) {
+				reject("The internet is gone!");
+			});
+		}, renderFeedResults).then(function () {
+			var statusElement = document.getElementById(ELEMENT_STATUS_ID);
+			var queryResult = document.getElementById(ELEMENT_QUERYRESULT_ID);
+			assert.equal(statusElement.hidden, false);
+			assert.equal(queryResult.hidden, true);
+			assert.equal(statusElement.innerHTML, "ERROR. The internet is gone!");
+			done();
+		});
+    });
+	QUnit.test("Open getJIRAQueryResult test", function(assert) {
+		var done = assert.async();
+		document.getElementById(ELEMENT_PROJECT_ID).value = 'someproject';
+		document.getElementById(ELEMENT_USER_ID).value = 'someuser';
+		document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value = 50;
+		document.getElementById(ELEMENT_STATUSSELECT_ID).value = 1; //Open
+		document.getElementById(ELEMENT_DAYSPAST_ID).value = 1;
+		getJIRAQueryResult(async function(url, responseFormat) {
+			return new Promise(function(resolve, reject) {
+				var json = {
+					"total": 1,
+					"otherstuff": "random stuff",
+					"issues": [
+						{
+							"self": "issue1link",
+							"key": "issue1",
+							"fields": {
+								"summary": "summary",
+								"status": {
+									"name": "open",
+									"description": "description"
+								}
+							}
+						}
+					]
+				};
+				resolve(json);
+			});
+		}, renderQueryResults).then(function () {
+			var statusElement = document.getElementById(ELEMENT_STATUS_ID);
+			var queryResult = document.getElementById(ELEMENT_QUERYRESULT_ID);
+			assert.equal(statusElement.hidden, true);
+			assert.equal(queryResult.hidden, false);
+			assert.equal(queryResult.innerHTML, "<ul><li><a href=\"issue1link\">issue1</a>: summary<ul><li>Status: open. description</li><li>Assigned To: nobody</li></ul></li></ul>");
+			done();
+		});
+    });
+	QUnit.test("In Progress getJIRAQueryResult test", function(assert) {
+		var done = assert.async();
+		document.getElementById(ELEMENT_PROJECT_ID).value = 'someproject';
+		document.getElementById(ELEMENT_USER_ID).value = 'someuser';
+		document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value = 50;
+		document.getElementById(ELEMENT_STATUSSELECT_ID).value = 3; // In Progress
+		document.getElementById(ELEMENT_DAYSPAST_ID).value = 1;
+		getJIRAQueryResult(async function(url, responseFormat) {
+			return new Promise(function(resolve, reject) {
+				var json = {
+					"total": 1,
+					"otherstuff": "random stuff",
+					"issues": [
+						{
+							"self": "issue1link",
+							"key": "issue1",
+							"fields": {
+								"summary": "summary",
+								"status": {
+									"name": "In Progress",
+									"description": "description"
+								},
+								"assignee": {
+									"self": "person1link",
+									"displayName": "person1",
+									"emailAddress": "person1email"
+								}
+							}
+						}
+					]
+				};
+				resolve(json);
+			});
+		}, renderQueryResults).then(function () {
+			var statusElement = document.getElementById(ELEMENT_STATUS_ID);
+			var queryResult = document.getElementById(ELEMENT_QUERYRESULT_ID);
+			assert.equal(statusElement.hidden, true);
+			assert.equal(queryResult.hidden, false);
+			assert.equal(queryResult.innerHTML, "<ul><li><a href=\"issue1link\">issue1</a>: summary<ul><li>Status: In Progress. description</li><li>Assigned To: <a href=\"person1link\">person1</a> (person1email)</li></ul></li></ul>");
+			done();
+		});
+    });
+	QUnit.test("Missing project getJIRAQueryResult test", function(assert) {
+		var done = assert.async();
+		document.getElementById(ELEMENT_PROJECT_ID).value = '';
+		document.getElementById(ELEMENT_USER_ID).value = 'someuser';
+		document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value = 50;
+		document.getElementById(ELEMENT_STATUSSELECT_ID).value = 3; // In Progress
+		document.getElementById(ELEMENT_DAYSPAST_ID).value = 1;
+		getJIRAQueryResult(async function(url, responseFormat) {
+			return new Promise(function(resolve, reject) {
+				var json = {
+					"total": 1,
+					"otherstuff": "random stuff",
+					"issues": [
+						{
+							"self": "issue1link",
+							"key": "issue1",
+							"fields": {
+								"summary": "summary",
+								"status": {
+									"name": "In Progress",
+									"description": "description"
+								},
+								"assignee": {
+									"self": "person1link",
+									"displayName": "person1",
+									"emailAddress": "person1email"
+								}
+							}
+						}
+					]
+				};
+				resolve(json);
+			});
+		}, renderQueryResults).then(function () {
+			var statusElement = document.getElementById(ELEMENT_STATUS_ID);
+			var queryResult = document.getElementById(ELEMENT_QUERYRESULT_ID);
+			assert.equal(statusElement.hidden, false);
+			assert.equal(queryResult.hidden, true);
+			assert.equal(statusElement.innerHTML, "ERROR. You must enter a project name to query for");
+			done();
+		});
+    });
+	QUnit.test("Missing max results getJIRAQueryResult test", function(assert) {
+		var done = assert.async();
+		document.getElementById(ELEMENT_PROJECT_ID).value = 'someproject';
+		document.getElementById(ELEMENT_USER_ID).value = 'someuser';
+		document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value = '';
+		document.getElementById(ELEMENT_STATUSSELECT_ID).value = 3; // In Progress
+		document.getElementById(ELEMENT_DAYSPAST_ID).value = 1;
+		getJIRAQueryResult(async function(url, responseFormat) {
+			return new Promise(function(resolve, reject) {
+				var json = {
+					"total": 1,
+					"otherstuff": "random stuff",
+					"issues": [
+						{
+							"self": "issue1link",
+							"key": "issue1",
+							"fields": {
+								"summary": "summary",
+								"status": {
+									"name": "In Progress",
+									"description": "description"
+								},
+								"assignee": {
+									"self": "person1link",
+									"displayName": "person1",
+									"emailAddress": "person1email"
+								}
+							}
+						}
+					]
+				};
+				resolve(json);
+			});
+		}, renderQueryResults).then(function () {
+			var statusElement = document.getElementById(ELEMENT_STATUS_ID);
+			var queryResult = document.getElementById(ELEMENT_QUERYRESULT_ID);
+			assert.equal(statusElement.hidden, false);
+			assert.equal(queryResult.hidden, true);
+			assert.equal(statusElement.innerHTML, "ERROR. Please specify a valid maximum number of items to return in your chrome options for this extension");
+			done();
+		});
+    });
+	QUnit.test("Missing days past getJIRAQueryResult test", function(assert) {
+		var done = assert.async();
+		document.getElementById(ELEMENT_PROJECT_ID).value = 'someproject';
+		document.getElementById(ELEMENT_USER_ID).value = 'someuser';
+		document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value = 50;
+		document.getElementById(ELEMENT_STATUSSELECT_ID).value = 3; // In Progress
+		document.getElementById(ELEMENT_DAYSPAST_ID).value = '';
+		getJIRAQueryResult(async function(url, responseFormat) {
+			return new Promise(function(resolve, reject) {
+				var json = {
+					"total": 1,
+					"otherstuff": "random stuff",
+					"issues": [
+						{
+							"self": "issue1link",
+							"key": "issue1",
+							"fields": {
+								"summary": "summary",
+								"status": {
+									"name": "In Progress",
+									"description": "description"
+								},
+								"assignee": {
+									"self": "person1link",
+									"displayName": "person1",
+									"emailAddress": "person1email"
+								}
+							}
+						}
+					]
+				};
+				resolve(json);
+			});
+		}, renderQueryResults).then(function () {
+			var statusElement = document.getElementById(ELEMENT_STATUS_ID);
+			var queryResult = document.getElementById(ELEMENT_QUERYRESULT_ID);
+			assert.equal(statusElement.hidden, false);
+			assert.equal(queryResult.hidden, true);
+			assert.equal(statusElement.innerHTML, "ERROR. You must choose a for longer than value in your query");
+			done();
+		});
+    });
+	QUnit.test("Network call error getJIRAQueryResult test", function(assert) {
+		var done = assert.async();
+		document.getElementById(ELEMENT_PROJECT_ID).value = 'someproject';
+		document.getElementById(ELEMENT_USER_ID).value = 'someuser';
+		document.getElementById(ELEMENT_MAXIMUMRESULTS_ID).value = 50;
+		document.getElementById(ELEMENT_STATUSSELECT_ID).value = 3; // In Progress
+		document.getElementById(ELEMENT_DAYSPAST_ID).value = 1;
+		getJIRAQueryResult(async function(url, responseFormat) {
+			return new Promise(function(resolve, reject) {
+				reject("The internet is gone!");
+			});
+		}, renderQueryResults).then(function () {
+			var statusElement = document.getElementById(ELEMENT_STATUS_ID);
+			var queryResult = document.getElementById(ELEMENT_QUERYRESULT_ID);
+			assert.equal(statusElement.hidden, false);
+			assert.equal(queryResult.hidden, true);
+			assert.equal(statusElement.innerHTML, "ERROR. The internet is gone!");
+			done();
+		});
     });
     </script>
 </head>
